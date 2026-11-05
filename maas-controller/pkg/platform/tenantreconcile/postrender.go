@@ -289,7 +289,7 @@ func configureTelemetryPolicyResources(log logr.Logger, tenant client.Object, re
 	gatewayNamespace := params.GatewayNamespace
 	gatewayName := params.GatewayName
 	tenantID := params.TenantIdentifier
-	metricLabels := buildTelemetryLabels(log, telemetry, tenant)
+	metricLabels := buildTelemetryLabels(log, telemetry)
 	tp := &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "extensions.kuadrant.io/v1alpha1",
@@ -324,14 +324,12 @@ func configureTelemetryPolicyResources(log logr.Logger, tenant client.Object, re
 }
 
 func configureIstioTelemetryResources(log logr.Logger, tenant client.Object, resources *[]unstructured.Unstructured, params PlatformParams) error {
-	telemetry := telemetryConfigFor(tenant)
-	if !IsTelemetryEnabled(telemetry) {
+	if !IsTelemetryEnabled(telemetryConfigFor(tenant)) {
 		return nil
 	}
 	gatewayNamespace := params.GatewayNamespace
 	gatewayName := params.GatewayName
 	tenantID := params.TenantIdentifier
-	tagOverrides := buildIstioTelemetryTagOverrides(tenant, telemetry)
 	istioTelemetry := &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "telemetry.istio.io/v1",
@@ -356,8 +354,13 @@ func configureIstioTelemetryResources(log logr.Logger, tenant client.Object, res
 						"providers": []any{map[string]any{"name": "prometheus"}},
 						"overrides": []any{
 							map[string]any{
-								"match":        map[string]any{"metric": "REQUEST_DURATION", "mode": "CLIENT_AND_SERVER"},
-								"tagOverrides": tagOverrides,
+								"match": map[string]any{"metric": "REQUEST_DURATION", "mode": "CLIENT_AND_SERVER"},
+								"tagOverrides": map[string]any{
+									"subscription": map[string]any{
+										"operation": "UPSERT",
+										"value":     `request.headers["x-maas-subscription"]`,
+									},
+								},
 							},
 						},
 					},
@@ -369,37 +372,6 @@ func configureIstioTelemetryResources(log logr.Logger, tenant client.Object, res
 	log.V(2).Info("Appending Istio Telemetry", "name", istioTelemetryName, "namespace", gatewayNamespace)
 	*resources = append(*resources, *istioTelemetry)
 	return nil
-}
-
-func buildIstioTelemetryTagOverrides(
-	tenant client.Object,
-	config *maasv1alpha1.TenantTelemetryConfig,
-) map[string]any {
-	captureOrganization := true
-	if config != nil && config.Metrics != nil && config.Metrics.CaptureOrganization != nil {
-		captureOrganization = *config.Metrics.CaptureOrganization
-	}
-	overrides := map[string]any{
-		"tenant_name": map[string]any{
-			"operation": "UPSERT",
-			"value":     fmt.Sprintf("%q", tenantTrackingName(tenant)),
-		},
-		"tenant_namespace": map[string]any{
-			"operation": "UPSERT",
-			"value":     fmt.Sprintf("%q", tenant.GetNamespace()),
-		},
-		"subscription": map[string]any{
-			"operation": "UPSERT",
-			"value":     `request.headers["x-maas-subscription"]`,
-		},
-	}
-	if captureOrganization {
-		overrides["organization_id"] = map[string]any{
-			"operation": "UPSERT",
-			"value":     `request.headers["x-maas-organization-id"]`,
-		}
-	}
-	return overrides
 }
 
 // configurePayloadProcessingHPA appends an HPA for payload-processing when autoscaling is enabled.
@@ -537,11 +509,7 @@ func appendIPPWorkloadHPA(log logr.Logger, resources *[]unstructured.Unstructure
 	return nil
 }
 
-func buildTelemetryLabels(
-	log logr.Logger,
-	config *maasv1alpha1.TenantTelemetryConfig,
-	tenant client.Object,
-) map[string]any {
+func buildTelemetryLabels(log logr.Logger, config *maasv1alpha1.TenantTelemetryConfig) map[string]any {
 	captureOrganization := true
 	captureUser := false
 	captureGroup := false
@@ -562,10 +530,8 @@ func buildTelemetryLabels(
 		}
 	}
 	labels := map[string]any{
-		"tenant_name":      fmt.Sprintf("%q", tenantTrackingName(tenant)),
-		"tenant_namespace": fmt.Sprintf("%q", tenant.GetNamespace()),
-		"subscription":     "auth.identity.selected_subscription",
-		"cost_center":      `has(auth.identity.subscription_info.costCenter) ? auth.identity.subscription_info.costCenter : ""`,
+		"subscription": "auth.identity.selected_subscription",
+		"cost_center":  `has(auth.identity.subscription_info.costCenter) ? auth.identity.subscription_info.costCenter : ""`,
 	}
 	if captureOrganization {
 		labels["organization_id"] = `has(auth.identity.subscription_info.organizationId) ? auth.identity.subscription_info.organizationId : ""`

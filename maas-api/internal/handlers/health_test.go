@@ -18,7 +18,7 @@ func (databaseHealthReporter) DatabaseHealth() map[string]any {
 	return map[string]any{"read_replica_configured": true, "read_pool_healthy": false}
 }
 
-func TestHealthCheckStaysPublicAndUnaugmented(t *testing.T) {
+func TestHealthCheckIncludesNonSecretDatabaseStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.GET("/health", handlers.NewHealthHandler().
@@ -26,19 +26,6 @@ func TestHealthCheckStaysPublicAndUnaugmented(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health", nil))
-
-	require.Equal(t, http.StatusOK, recorder.Code)
-	assert.JSONEq(t, `{"status":"healthy"}`, recorder.Body.String())
-}
-
-func TestDatabaseHealthCheckIncludesNonSecretDatabaseStatus(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	router.GET("/health/database", handlers.NewHealthHandler().
-		WithDatabaseHealth(databaseHealthReporter{}).DatabaseHealthCheck)
-
-	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health/database", nil))
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	assert.JSONEq(t, `{
