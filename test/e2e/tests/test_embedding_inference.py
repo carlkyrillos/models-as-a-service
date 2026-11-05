@@ -213,7 +213,7 @@ class TestEmbeddingDefaultDeny:
 class TestEmbeddingPathRouting:
     """Path-based and BBR embedding inference (read-only, uses existing fixtures)."""
 
-    pytestmark = pytest.mark.serial
+    pytestmark = [pytest.mark.serial, pytest.mark.full_suite]
 
     def test_embedding_path_based_200(self, embedding_path_governance):
         """POST /{ns}/{model}/v1/embeddings returns valid embedding response."""

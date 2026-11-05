@@ -376,6 +376,7 @@ class TestPerTenantMaaSAPI:
         assert len({deployment["metadata"]["name"] for deployment in tenant_deployments if deployment}) == len(tenant_cases)
 
     @pytest.mark.serial
+    @pytest.mark.full_suite
     def test_dual_listeners_keep_one_authconfig_per_listener_rule(self, dual_listener_tenant_case):
         """One stable AuthConfig per listener and rule when both listeners attach the route.
 
